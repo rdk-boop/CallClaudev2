@@ -22,7 +22,7 @@ hist = stock.history(end=pd.Timestamp(purchase_date) + pd.Timedelta(days=1))
 if hist.empty:
     st.error("No stock price data available for the selected purchase date.")
     st.stop()
-stock_price = hist['Close'][-1]
+stock_price = hist['Close'].iloc[-1]
 
 # --- Dividend series ---
 div_series = stock.dividends
@@ -83,6 +83,9 @@ for option_exp in filtered_exps:
         st.warning(f"No call options for expiration {option_exp.date()}")
         continue
 
+    with st.expander(f"Raw pricing data — {option_exp.date()}"):
+        st.dataframe(opt_chain[['strike', 'bid', 'ask', 'lastPrice', 'volume', 'openInterest']].head(10))
+
     # --- Filter ITM strikes: 10%–40% below stock price ---
     lower_bound = stock_price * 0.6
     upper_bound = stock_price * 0.9
@@ -92,7 +95,10 @@ for option_exp in filtered_exps:
         continue
 
     # --- Common calculations ---
-    opt_chain['Option Price'] = (opt_chain['bid'] + opt_chain['ask']) / 2
+    # Yahoo/yfinance frequently returns 0 for bid/ask on illiquid or delayed data.
+    # Fall back to lastPrice when both bid and ask are 0 or missing.
+    mid_price = (opt_chain['bid'] + opt_chain['ask']) / 2
+    opt_chain['Option Price'] = mid_price.where(mid_price > 0, opt_chain['lastPrice'])
     opt_chain['Net Debit'] = stock_price - opt_chain['Option Price']
     opt_chain['Option Premium'] = opt_chain['strike'] + opt_chain['Option Price'] - stock_price
     opt_chain['Open Interest'] = opt_chain['openInterest']
