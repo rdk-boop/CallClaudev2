@@ -22,7 +22,7 @@ hist = stock.history(end=pd.Timestamp(purchase_date) + pd.Timedelta(days=1))
 if hist.empty:
     st.error("No stock price data available for the selected purchase date.")
     st.stop()
-stock_price = hist['Close'][-1]
+stock_price = hist['Close'].iloc[-1]
 
 # --- Dividend series ---
 div_series = stock.dividends
