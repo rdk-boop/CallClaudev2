@@ -22,7 +22,7 @@ hist = stock.history(end=pd.Timestamp(purchase_date) + pd.Timedelta(days=1))
 if hist.empty:
     st.error("No stock price data available for the selected purchase date.")
     st.stop()
-stock_price = hist['Close'].iloc[-1]
+stock_price = hist['Close'][-1]
 
 # --- Dividend series ---
 div_series = stock.dividends
@@ -57,6 +57,7 @@ else:
 today = pd.Timestamp(purchase_date).tz_localize("America/New_York")
 
 all_options = []
+all_debug_info = []
 
 # --- Identify expirations 6 to 18 months out ---
 available_exps = stock.options
@@ -135,6 +136,17 @@ for option_exp in filtered_exps:
     # Calculate total dividends
     single_dividend = yearly_dividend / div_freq if div_freq > 0 else 0
     divs_during_period = single_dividend * expected_div_payments
+    
+    # Store debug info for later display
+    debug_info = {
+        'option_exp': option_exp,
+        'last_known_div': last_known_div,
+        'avg_days_between': avg_days_between,
+        'divs_in_period': divs_in_period,
+        'expected_div_payments': expected_div_payments,
+        'single_dividend': single_dividend,
+        'divs_during_period': divs_during_period
+    }
 
     # --- Scenario: Hold Dividend (hold to expiration, receive all dividends) ---
     hold = pd.DataFrame(index=opt_chain.index)
@@ -163,6 +175,15 @@ for option_exp in filtered_exps:
         divs_received_early = 0
         early_call_date = option_exp
         days_held_early = days_held
+
+    # Store early call debug info
+    debug_info['early_call'] = {
+        'last_div_date': divs_in_period[-1] if len(divs_in_period) > 0 else None,
+        'early_call_date': early_call_date,
+        'expected_payments_early': expected_payments_early,
+        'divs_received_early': divs_received_early,
+        'days_held_early': days_held_early
+    }
 
     early = pd.DataFrame(index=opt_chain.index)
     early['Dividend + Premium'] = (opt_chain['Option Premium'].values * shares) + (divs_received_early * shares)
@@ -200,6 +221,7 @@ for option_exp in filtered_exps:
     })
 
     all_options.append(combined)
+    all_debug_info.append(debug_info)
 
 # --- Combine all expirations ---
 if all_options:
@@ -372,3 +394,28 @@ if st.button("Calculate What-If Scenario"):
     
     st.dataframe(whatif_results[display_cols])
     st.markdown(get_table_download_link(whatif_results, filename="whatif_scenario.csv"), unsafe_allow_html=True)
+
+# --- Debug Information ---
+st.subheader("Debug Information")
+for debug_info in all_debug_info:
+    st.write(f"=== Expiration {debug_info['option_exp'].date()} ===")
+    st.write(f"Last known dividend: {debug_info['last_known_div'].date()}")
+    st.write(f"Avg days between dividends: {debug_info['avg_days_between']:.1f}")
+    st.write(f"Projected dividend dates in holding period:")
+    for d in debug_info['divs_in_period']:
+        st.write(f"  - {d.date()}")
+    st.write(f"Number of dividend payments: {debug_info['expected_div_payments']}")
+    st.write(f"Single dividend: ${debug_info['single_dividend']:.4f}")
+    st.write(f"Total dividends: ${debug_info['divs_during_period']:.4f}")
+    st.write(f"")
+    st.write(f"Early call scenario:")
+    if debug_info['early_call']['last_div_date']:
+        st.write(f"  Last dividend date: {debug_info['early_call']['last_div_date'].date()}")
+    else:
+        st.write(f"  Last dividend date: N/A")
+    st.write(f"  Early call date (0 days before last div): {debug_info['early_call']['early_call_date'].date()}")
+    st.write(f"  Dividends received if called early: {debug_info['early_call']['expected_payments_early']}")
+    st.write(f"  Total dividends: ${debug_info['early_call']['divs_received_early']:.4f}")
+    st.write(f"  Days held: {debug_info['early_call']['days_held_early']}")
+    st.write(f"===")
+    st.write("")
