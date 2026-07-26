@@ -19,10 +19,10 @@ stock = yf.Ticker(stock_symbol)
 
 # --- Get last available close on or before purchase date ---
 hist = stock.history(end=pd.Timestamp(purchase_date) + pd.Timedelta(days=1))
-if hist.empty:
+if hist.empty or hist['Close'].dropna().empty:
     st.error("No stock price data available for the selected purchase date.")
     st.stop()
-stock_price = float(hist['Close'].iloc[-1])
+stock_price = float(hist['Close'].dropna().iloc[-1])
 
 # --- Dividend series ---
 div_series = stock.dividends
