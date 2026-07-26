@@ -306,12 +306,24 @@ def highlight_top_3_rows(x):
     return [color] * len(x)
 
 st.subheader(f"{stock_symbol} Buy-Write Dashboard (6–18 Months, ITM 10–40% below stock)")
-st.dataframe(final_df[display_cols].style.apply(highlight_top_3_rows, axis=1))
+format_dict = {
+    'Strike': '{:.1f}',
+    'Stock Price': '{:.2f}',
+    'Forward Dividend $': '{:.2f}',
+    'Option Price': '{:.2f}',
+    'Net Debit': '{:.2f}',
+    'Option Premium': '{:.2f}',
+    'Premium - Single Dividend': '{:.2f}',
+    'Open Interest': '{:.0f}',
+    'Hold Dividend: Dividend + Premium': '{:.2f}',
+    'Called Early: Dividend + Premium': '{:.2f}',
+}
+st.dataframe(final_df[display_cols].style.apply(highlight_top_3_rows, axis=1).format(format_dict))
 
 # --- Best Overall Option ---
 best_option_df = pd.DataFrame([final_df.loc[top_3_indices[0]]])
 st.subheader("Best Overall Option (Hold Dividend scenario)")
-st.dataframe(best_option_df[display_cols])
+st.dataframe(best_option_df[display_cols].style.format(format_dict))
 
 # --- Download CSV ---
 def get_table_download_link(df, filename="options_data.csv"):
