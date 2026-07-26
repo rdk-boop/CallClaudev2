@@ -245,12 +245,24 @@ else:
 # Criteria: Option Premium > 0, Hold Dividend Total % > 10%, Hold Dividend Annualized % > 10%
 final_df['Meet Criteria'] = (
     (final_df['Option Premium'] > 0) & 
+    (final_df['Premium - Single Dividend'] > 0) &
     (final_df['Hold Dividend: Total %'] > 10) & 
     (final_df['Hold Dividend: Annualized %'] > 10)
 )
 
 # --- Store numeric value for sorting BEFORE formatting ---
 final_df['Hold_Total_Numeric'] = final_df['Hold Dividend: Total %']
+
+# --- Round numeric columns for clean display ---
+final_df['Strike'] = final_df['Strike'].round(2)
+final_df['Stock Price'] = final_df['Stock Price'].round(2)
+final_df['Forward Dividend $'] = final_df['Forward Dividend $'].round(2)
+final_df['Option Price'] = final_df['Option Price'].round(2)
+final_df['Net Debit'] = final_df['Net Debit'].round(2)
+final_df['Option Premium'] = final_df['Option Premium'].round(2)
+final_df['Premium - Single Dividend'] = final_df['Premium - Single Dividend'].round(2)
+final_df['Hold Dividend: Dividend + Premium'] = final_df['Hold Dividend: Dividend + Premium'].round(2)
+final_df['Called Early: Dividend + Premium'] = final_df['Called Early: Dividend + Premium'].round(2)
 
 # --- Format % columns ---
 pct_cols = [
@@ -285,15 +297,13 @@ display_cols = [
 top_3_indices = final_df.nlargest(3, 'Hold_Total_Numeric').index
 
 def highlight_top_3_rows(x):
-    colors = []
-    for i in x.index:
-        if i == top_3_indices[0]:
-            colors.append('background-color: lightgreen')
-        elif i in top_3_indices[1:].tolist():
-            colors.append('background-color: lightyellow')
-        else:
-            colors.append('')
-    return colors
+    if x.name == top_3_indices[0]:
+        color = 'background-color: lightgreen'
+    elif x.name in top_3_indices[1:].tolist():
+        color = 'background-color: lightyellow'
+    else:
+        color = ''
+    return [color] * len(x)
 
 st.subheader(f"{stock_symbol} Buy-Write Dashboard (6–18 Months, ITM 10–40% below stock)")
 st.dataframe(final_df[display_cols].style.apply(highlight_top_3_rows, axis=1))
