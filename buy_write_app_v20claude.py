@@ -22,7 +22,7 @@ hist = stock.history(end=pd.Timestamp(purchase_date) + pd.Timedelta(days=1))
 if hist.empty:
     st.error("No stock price data available for the selected purchase date.")
     st.stop()
-stock_price = hist['Close'].iloc[-1]
+stock_price = float(hist['Close'].iloc[-1])
 
 # --- Dividend series ---
 div_series = stock.dividends
@@ -87,8 +87,13 @@ for option_exp in filtered_exps:
         st.dataframe(opt_chain[['strike', 'bid', 'ask', 'lastPrice', 'volume', 'openInterest']].head(10))
 
     # --- Filter ITM strikes: 10%–40% below stock price ---
-    lower_bound = stock_price * 0.6
-    upper_bound = stock_price * 0.9
+    opt_chain['strike'] = pd.to_numeric(opt_chain['strike'], errors='coerce')
+    lower_bound = float(stock_price * 0.6)
+    upper_bound = float(stock_price * 0.9)
+    st.caption(f"Debug — {option_exp.date()}: stock_price={stock_price:.2f}, "
+               f"lower_bound={lower_bound:.2f}, upper_bound={upper_bound:.2f}, "
+               f"strike dtype={opt_chain['strike'].dtype}, "
+               f"strikes available={sorted(opt_chain['strike'].dropna().tolist())}")
     opt_chain = opt_chain[(opt_chain['strike'] >= lower_bound) & (opt_chain['strike'] <= upper_bound)]
     if opt_chain.empty:
         st.warning(f"No ITM options 10–40% below stock price for expiration {option_exp.date()}")
