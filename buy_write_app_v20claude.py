@@ -3,6 +3,47 @@ import yfinance as yf
 import streamlit as st
 from datetime import datetime
 import base64
+import time
+
+try:
+    from yfinance.exceptions import YFRateLimitError
+except ImportError:
+    class YFRateLimitError(Exception):
+        pass
+
+
+def fetch_with_retry(fn, *args, max_retries=3, base_delay=3, **kwargs):
+    """Call fn(*args, **kwargs), retrying with backoff if Yahoo rate-limits us."""
+    last_err = None
+    for attempt in range(max_retries):
+        try:
+            return fn(*args, **kwargs)
+        except YFRateLimitError as e:
+            last_err = e
+            if attempt < max_retries - 1:
+                time.sleep(base_delay * (attempt + 1))
+    raise last_err
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def get_history(symbol, end_ts):
+    return fetch_with_retry(lambda: yf.Ticker(symbol).history(end=end_ts))
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def get_dividends(symbol):
+    return fetch_with_retry(lambda: yf.Ticker(symbol).dividends)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def get_options_list(symbol):
+    return fetch_with_retry(lambda: yf.Ticker(symbol).options)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def get_option_chain(symbol, exp_str):
+    return fetch_with_retry(lambda: yf.Ticker(symbol).option_chain(exp_str).calls)
+
 
 # --- User Inputs ---
 stock_symbol = st.text_input("Enter Stock Ticker", "OKE")
@@ -15,17 +56,29 @@ purchase_date = st.date_input("Date Purchased", datetime.today())
 filter_criteria = st.checkbox("Show only options that meet criteria", value=False)
 
 # --- Fetch stock data ---
-stock = yf.Ticker(stock_symbol)
+try:
+    hist = get_history(stock_symbol, pd.Timestamp(purchase_date) + pd.Timedelta(days=1))
+except YFRateLimitError:
+    st.error(
+        "Yahoo Finance is currently rate-limiting requests from this server "
+        "(common on Streamlit Cloud's shared IPs). Please wait a minute and try again."
+    )
+    st.stop()
 
-# --- Get last available close on or before purchase date ---
-hist = stock.history(end=pd.Timestamp(purchase_date) + pd.Timedelta(days=1))
 if hist.empty or hist['Close'].dropna().empty:
     st.error("No stock price data available for the selected purchase date.")
     st.stop()
 stock_price = float(hist['Close'].dropna().iloc[-1])
 
 # --- Dividend series ---
-div_series = stock.dividends
+try:
+    div_series = get_dividends(stock_symbol)
+except YFRateLimitError:
+    st.error(
+        "Yahoo Finance is currently rate-limiting requests from this server "
+        "(common on Streamlit Cloud's shared IPs). Please wait a minute and try again."
+    )
+    st.stop()
 if not div_series.empty:
     if div_series.index.tz is None:
         div_series = div_series.tz_localize("America/New_York")
@@ -60,7 +113,14 @@ all_options = []
 all_debug_info = []
 
 # --- Identify expirations 6 to 18 months out ---
-available_exps = stock.options
+try:
+    available_exps = get_options_list(stock_symbol)
+except YFRateLimitError:
+    st.error(
+        "Yahoo Finance is currently rate-limiting requests from this server "
+        "(common on Streamlit Cloud's shared IPs). Please wait a minute and try again."
+    )
+    st.stop()
 filtered_exps = []
 for exp_str in available_exps:
     exp_date = pd.Timestamp(exp_str).tz_localize("America/New_York")
@@ -74,7 +134,13 @@ if not filtered_exps:
 # --- Loop through filtered expirations ---
 for option_exp in filtered_exps:
     try:
-        opt_chain = stock.option_chain(option_exp.strftime('%Y-%m-%d')).calls
+        opt_chain = get_option_chain(stock_symbol, option_exp.strftime('%Y-%m-%d'))
+    except YFRateLimitError:
+        st.warning(
+            f"Rate-limited fetching option chain for {option_exp.date()} — skipping this expiration. "
+            "Try again in a minute."
+        )
+        continue
     except Exception as e:
         st.warning(f"Error fetching option chain for {option_exp.date()}: {e}")
         continue
